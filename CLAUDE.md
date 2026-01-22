@@ -43,7 +43,9 @@ vyapariai/
   - `POST /api/jobs` — upload a PDF and create a job (multipart/form-data, field `"file"`, validates PDF type/extension, max 20MB)
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
+  - `GET /api/jobs/[id]/text` — returns .data/uploads/<jobId>/extracted_text.txt as text/plain
 - `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text and computing deterministic text quality metrics
+- Job detail page displays status, timestamps, extracted text (read-only, truncated), textExtractionMetrics, and warnings
 - Local development only (no deployment targets)
 
 ## Current Constraints
@@ -67,6 +69,11 @@ As of now, the following are implemented:
 - apps/web exposes API routes:
   - `POST /api/jobs` accepts multipart/form-data with field `"file"` (PDF, max 20MB).
   - `GET /api/jobs` and `GET /api/jobs/[id]` return job data.
+  - `GET /api/jobs/[id]/text` returns .data/uploads/<jobId>/extracted_text.txt as text/plain (rejects paths outside uploads/).
+- Job detail page (`/jobs/[id]`) displays:
+  - Status and timestamps
+  - Extracted text (read-only, truncated; loaded via client component)
+  - `textExtractionMetrics` and quality warnings
 - apps/worker includes a run-once processor that:
   - finds a PENDING job
   - extracts text from the PDF using Poppler `pdftotext` (embedded text only, no OCR)
@@ -81,7 +88,7 @@ As of now, the following are implemented:
   - `isLikelyScanned`: boolean (conservative rule-based heuristic)
   - `qualityBand`: "LOW" | "MEDIUM" | "HIGH" (rule-based)
 - Worker tests: `npm -w apps/worker test` runs unit tests for text metrics.
-- UI uploads PDFs and reads job state via API routes.
+- UI uploads PDFs, lists jobs, and shows job detail page with extracted text and metrics.
 
 Anything not listed here should be assumed NOT implemented.
 
@@ -93,6 +100,15 @@ Anything not listed here should be assumed NOT implemented.
 3. Make small, testable changes
 4. Prefer clarity over cleverness
 5. Always list files changed at the end of a task
+
+## Workflow
+
+Use the following workflow for non-trivial changes:
+
+- **Plan first**: Create and get approval for the implementation plan before writing code.
+- **Implement**: Execute the approved plan.
+- **Review gate**: Strict code review before merge; security and path-safety issues must be fixed.
+- **Iterate**: If review finds issues, fix and re-review until approved.
 
 ## How to Run Locally
 
