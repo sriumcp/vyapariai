@@ -7,7 +7,7 @@ import type { Job } from "../lib/jobs";
 export default function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newFilename, setNewFilename] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
 
   async function fetchJobs() {
@@ -23,17 +23,22 @@ export default function DashboardPage() {
 
   async function handleCreateJob(e: React.FormEvent) {
     e.preventDefault();
-    if (!newFilename.trim()) return;
+    if (!selectedFile) return;
 
     setCreating(true);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
     const res = await fetch("/api/jobs", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: newFilename.trim() }),
+      body: formData,
     });
 
     if (res.ok) {
-      setNewFilename("");
+      setSelectedFile(null);
+      // Reset file input
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
       await fetchJobs();
     }
     setCreating(false);
@@ -48,18 +53,17 @@ export default function DashboardPage() {
 
         <form onSubmit={handleCreateJob} className="mb-6 flex gap-2">
           <input
-            type="text"
-            value={newFilename}
-            onChange={(e) => setNewFilename(e.target.value)}
-            placeholder="Enter filename (e.g., document.pdf)"
-            className="flex-1 rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-400"
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+            className="flex-1 rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1 file:text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:file:bg-zinc-800 dark:file:text-zinc-300"
           />
           <button
             type="submit"
-            disabled={creating || !newFilename.trim()}
+            disabled={creating || !selectedFile}
             className="rounded bg-zinc-900 px-4 py-2 text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            {creating ? "Creating..." : "New Job"}
+            {creating ? "Uploading..." : "Upload PDF"}
           </button>
         </form>
 
