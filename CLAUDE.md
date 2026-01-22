@@ -21,7 +21,7 @@ vyapariai/
 │   ├── web/        # Next.js App Router (TypeScript)
 │   └── worker/     # Background worker for PDF + AI jobs
 ├── packages/       # Shared libraries (types, prompts, provider interfaces)
-├── .data/          # Local JSON store (not committed)
+├── .data/          # Local store: jobs.json + uploads/ (not committed)
 ├── package.json    # Root workspace config
 └── CLAUDE.md
 ```
@@ -30,7 +30,7 @@ vyapariai/
 - `apps/web` is the user-facing frontend with API routes for job management
 - `apps/worker` handles long-running processing
 - `packages/*` contains shared code only—no apps
-- `.data/jobs.json` stores jobs locally (gitignored)
+- `.data/jobs.json` stores jobs locally; `.data/uploads/` stores uploaded PDFs (both gitignored)
 
 ## Architectural Principles
 
@@ -43,7 +43,7 @@ vyapariai/
 
 - Jobs are persisted via JSON file store (`.data/jobs.json`)
 - `apps/web` exposes API routes:
-  - `POST /api/jobs` — create a job (filename only)
+  - `POST /api/jobs` — upload a PDF and create a job (multipart/form-data, field `"file"`, validates PDF type/extension, max 20MB)
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
 - `apps/worker` has a `run-once` script that processes one PENDING job, marks it SUCCEEDED, and adds placeholder artifacts
@@ -53,7 +53,6 @@ vyapariai/
 
 - No database yet (JSON file store; Postgres planned later)
 - No authentication yet
-- No real PDF upload yet (filename only)
 - No AI provider calls yet (placeholder artifacts only)
 - No queues; worker reads directly from job store
 - Local development only
@@ -65,13 +64,17 @@ vyapariai/
 
 As of now, the following are implemented:
 
-- Jobs are persisted locally via a JSON-backed store under `.data/` (not committed).
-- apps/web exposes API routes to create and read jobs.
-- apps/worker includes a stub processor that:
+- Jobs are persisted locally via a JSON-backed store under `.data/jobs.json` (not committed).
+- Uploaded PDFs are stored at `.data/uploads/<jobId>/document.pdf`.
+- Each job includes a `document` field with metadata: `originalName`, `storedPath`, `mimeType`, `sizeBytes`.
+- apps/web exposes API routes:
+  - `POST /api/jobs` accepts multipart/form-data with field `"file"` (PDF, max 20MB).
+  - `GET /api/jobs` and `GET /api/jobs/[id]` return job data.
+- apps/worker includes a run-once stub processor that:
   - finds a PENDING job
   - marks it SUCCEEDED
   - writes placeholder artifacts (summary, risk gaps, checklist).
-- UI reads job state via API routes (no hardcoded job list).
+- UI uploads PDFs and reads job state via API routes.
 
 Anything not listed here should be assumed NOT implemented.
 
