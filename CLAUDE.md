@@ -21,14 +21,16 @@ vyapariai/
 │   ├── web/        # Next.js App Router (TypeScript)
 │   └── worker/     # Background worker for PDF + AI jobs
 ├── packages/       # Shared libraries (types, prompts, provider interfaces)
+├── .data/          # Local JSON store (not committed)
 ├── package.json    # Root workspace config
 └── CLAUDE.md
 ```
 
 - Root uses npm workspaces (`apps/*`, `packages/*`)
-- `apps/web` is the user-facing frontend
+- `apps/web` is the user-facing frontend with API routes for job management
 - `apps/worker` handles long-running processing
 - `packages/*` contains shared code only—no apps
+- `.data/jobs.json` stores jobs locally (gitignored)
 
 ## Architectural Principles
 
@@ -37,13 +39,24 @@ vyapariai/
 3. **Start simple, evolve incrementally**: avoid overengineering
 4. **No premature infrastructure or abstraction**: add complexity only when needed
 
+## Current State
+
+- Jobs are persisted via JSON file store (`.data/jobs.json`)
+- `apps/web` exposes API routes:
+  - `POST /api/jobs` — create a job (filename only)
+  - `GET /api/jobs` — list all jobs
+  - `GET /api/jobs/[id]` — get job details and artifacts
+- `apps/worker` has a `run-once` script that processes one PENDING job, marks it SUCCEEDED, and adds placeholder artifacts
+- Local development only (no deployment targets)
+
 ## Current Constraints
 
-- No database yet (hardcoded data is acceptable)
+- No database yet (JSON file store; Postgres planned later)
 - No authentication yet
-- No AI provider SDKs yet (design behind interfaces)
-- No queues yet (DB-backed jobs table planned for MVP)
-- Local development only (no deployment targets)
+- No real PDF upload yet (filename only)
+- No AI provider calls yet (placeholder artifacts only)
+- No queues; worker reads directly from job store
+- Local development only
 
 ## AI Contribution Rules
 
@@ -62,6 +75,6 @@ npm install
 # Run the web app
 npm run dev:web
 
-# Run the worker (placeholder, not yet implemented)
+# Run the worker (processes one PENDING job)
 npm run dev:worker
 ```

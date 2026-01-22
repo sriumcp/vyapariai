@@ -1,0 +1,9 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node src/run-once.js",
+    "run-once": "node src/run-once.js"
+  }
+}
