@@ -1,10 +1,41 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJobById } from "../../lib/jobs";
+import {
+  deriveDocumentPolicy,
+  REASON_DESCRIPTIONS,
+  READINESS_GUIDANCE,
+  type ReasonCode,
+  type ReadinessStatus,
+} from "../../lib/policy/documentReadiness";
 import ExtractedTextViewer from "./ExtractedTextViewer";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+/** Badge styling for each readiness status */
+function getReadinessBadgeStyles(readiness: ReadinessStatus): string {
+  switch (readiness) {
+    case "READY":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "DEGRADED":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "UNUSABLE":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+  }
+}
+
+/** Guidance box styling for each readiness status */
+function getGuidanceStyles(readiness: ReadinessStatus): string {
+  switch (readiness) {
+    case "READY":
+      return "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200";
+    case "DEGRADED":
+      return "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200";
+    case "UNUSABLE":
+      return "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200";
+  }
 }
 
 export default async function JobPage({ params }: PageProps) {
@@ -18,19 +49,8 @@ export default async function JobPage({ params }: PageProps) {
   const metrics = job.textExtractionMetrics;
   const isSucceeded = job.status === "SUCCEEDED";
 
-  // Determine warnings
-  const warnings: string[] = [];
-  if (metrics) {
-    if (metrics.isEmpty) {
-      warnings.push("Warning: No text content extracted");
-    }
-    if (metrics.isLikelyScanned) {
-      warnings.push("Warning: Document may be scanned (image-based PDF)");
-    }
-    if (metrics.qualityBand === "LOW") {
-      warnings.push("Warning: Low quality text extraction");
-    }
-  }
+  // Compute document readiness policy from metrics
+  const policy = deriveDocumentPolicy(metrics);
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8 dark:bg-black">
@@ -85,6 +105,38 @@ export default async function JobPage({ params }: PageProps) {
           )}
         </div>
 
+        {/* Document Readiness */}
+        <div className="mb-8">
+          <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+            Document Readiness
+          </h2>
+
+          {/* Readiness Badge */}
+          <div className="mb-4">
+            <span
+              className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${getReadinessBadgeStyles(policy.readiness)}`}
+            >
+              {policy.readiness}
+            </span>
+          </div>
+
+          {/* Reasons List */}
+          {policy.reasons.length > 0 && (
+            <ul className="mb-4 list-inside list-disc space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
+              {policy.reasons.map((reason: ReasonCode) => (
+                <li key={reason}>{REASON_DESCRIPTIONS[reason]}</li>
+              ))}
+            </ul>
+          )}
+
+          {/* Guidance Box */}
+          <div
+            className={`rounded border p-4 text-sm ${getGuidanceStyles(policy.readiness)}`}
+          >
+            {READINESS_GUIDANCE[policy.readiness]}
+          </div>
+        </div>
+
         {/* Text Quality Metrics */}
         {metrics && (
           <div className="mb-8">
@@ -96,20 +148,6 @@ export default async function JobPage({ params }: PageProps) {
               <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
                 Note: Job has not completed successfully
               </p>
-            )}
-
-            {/* Warnings */}
-            {warnings.length > 0 && (
-              <div className="mb-4 space-y-2">
-                {warnings.map((warning, i) => (
-                  <div
-                    key={i}
-                    className="rounded bg-yellow-100 px-4 py-2 text-sm text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                  >
-                    {warning}
-                  </div>
-                ))}
-              </div>
             )}
 
             <div className="rounded border border-zinc-200 p-4 dark:border-zinc-700">
