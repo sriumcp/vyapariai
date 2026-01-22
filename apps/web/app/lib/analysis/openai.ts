@@ -143,10 +143,34 @@ export async function runAnalysis(
     const data = await response.json();
 
     // Extract the structured output from the response
-    // Responses API returns output in a different structure
-    const outputText = data.output?.[0]?.content?.[0]?.text;
+    // Responses API returns output array with multiple items (reasoning, message)
+    // We need to find the "message" type item and get text from its content
+    let outputText: string | undefined;
+
+    if (Array.isArray(data.output)) {
+      // Find the message output (skip reasoning output)
+      const messageOutput = data.output.find(
+        (item: { type: string }) => item.type === "message"
+      );
+      if (messageOutput?.content && Array.isArray(messageOutput.content)) {
+        // Find the output_text content item
+        const textContent = messageOutput.content.find(
+          (c: { type: string }) => c.type === "output_text" || c.type === "text"
+        );
+        outputText = textContent?.text;
+      }
+    }
+
+    // Fallback: Chat Completions style
     if (!outputText) {
-      console.error("Unexpected OpenAI response structure");
+      outputText = data.choices?.[0]?.message?.content;
+    }
+
+    if (!outputText) {
+      console.error(
+        "Failed to extract text from OpenAI response. Output structure:",
+        JSON.stringify(data.output, null, 2).slice(0, 500)
+      );
       throw new Error("Failed to parse OpenAI response");
     }
 
