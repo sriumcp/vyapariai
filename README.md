@@ -143,6 +143,9 @@ Analysis is blocked when:
 ```bash
 # Worker unit tests
 npm -w apps/worker test
+
+# Web unit tests
+npm -w apps/web test
 ```
 
 ### Run linter

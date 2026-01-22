@@ -126,6 +126,7 @@ As of now, the following are implemented:
 
 ### Tests
 - Worker tests: `npm -w apps/worker test` runs unit tests for text metrics
+- Web tests: `npm -w apps/web test` runs unit tests for document readiness policy and analysis gating
 
 Anything not listed here should be assumed NOT implemented.
 
