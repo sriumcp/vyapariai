@@ -18,7 +18,7 @@ incrementally evolve into an AI-assisted decision-support system.
 vyapariai/
 ├── apps/
 │   ├── web/        # Next.js App Router (TypeScript)
-│   └── worker/     # Background worker for PDF + AI jobs
+│   └── worker/     # Background worker for PDF processing jobs
 ├── .data/          # Local store: jobs.json + uploads/ (not committed)
 ├── package.json    # Root workspace config
 └── CLAUDE.md
@@ -44,14 +44,13 @@ vyapariai/
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
 - `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text and computing deterministic text quality metrics
-
 - Local development only (no deployment targets)
 
 ## Current Constraints
 
 - No database (JSON file store only)
-- No authentication yet
-- No AI provider calls yet (text extraction only, no summarization/analysis)
+- No authentication
+- No AI provider calls (text extraction only, no summarization/analysis)
 - No queues; worker reads directly from job store
 - Local development only
 - `.data/` is a local-only development store and must never be committed to git.
@@ -74,8 +73,7 @@ As of now, the following are implemented:
   - writes extracted text to `.data/uploads/<jobId>/extracted_text.txt`
   - stores extracted text artifact metadata in the job record
   - computes deterministic text quality metrics and stores them in the job record under `textExtractionMetrics`
-  - marks job SUCCEEDED if pdftotext succeeds (even if text is empty),
-or FAILED if extraction command fails or file is missing.
+  - marks job SUCCEEDED if pdftotext succeeds (even if text is empty), or FAILED if extraction command fails or file is missing.
 - `textExtractionMetrics` contains:
   - `charCount`, `wordCount`, `lineCount`: basic counts
   - `nonAsciiRatio`, `whitespaceRatio`: ratios (0..1)
