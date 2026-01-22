@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { execFileSync } = require("child_process");
+const { computeTextMetrics } = require("./text-metrics");
 
 // Path to the JSON store at repo root
 const DATA_DIR = path.join(__dirname, "..", "..", "..", ".data");
@@ -92,7 +93,12 @@ function main() {
     extractTextFromPdf(pdfPath, extractedTextPath);
     console.log(`Worker: Text extracted to ${extractedTextPath}`);
 
-    // Update job with success status and artifact metadata
+    // Read extracted text and compute quality metrics
+    const extractedText = fs.readFileSync(extractedTextPath, "utf-8");
+    const textExtractionMetrics = computeTextMetrics(extractedText);
+    console.log(`Worker: Computed text metrics - ${textExtractionMetrics.wordCount} words, quality: ${textExtractionMetrics.qualityBand}`);
+
+    // Update job with success status, artifact metadata, and metrics
     jobs[pendingIndex] = {
       ...job,
       status: "SUCCEEDED",
@@ -101,6 +107,7 @@ function main() {
           path: relativeExtractedTextPath,
         },
       },
+      textExtractionMetrics,
     };
     writeJobsFile(jobs);
     console.log(`Worker: Job ${job.id} marked as SUCCEEDED with extractedText artifact.`);
