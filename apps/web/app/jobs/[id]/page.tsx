@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getJobById } from "../../lib/jobs";
+import { promises as fs } from "fs";
+import * as path from "path";
+import { getJobById, DATA_DIR } from "../../lib/jobs";
 import {
   deriveDocumentPolicy,
   REASON_DESCRIPTIONS,
@@ -8,7 +10,10 @@ import {
   type ReasonCode,
   type ReadinessStatus,
 } from "../../lib/policy/documentReadiness";
+import { checkAnalysisGating } from "../../lib/analysis/gating";
+import type { AnalysisResult } from "../../lib/analysis/types";
 import ExtractedTextViewer from "./ExtractedTextViewer";
+import AnalysisSection from "./AnalysisSection";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -51,6 +56,21 @@ export default async function JobPage({ params }: PageProps) {
 
   // Compute document readiness policy from metrics
   const policy = deriveDocumentPolicy(metrics);
+
+  // Compute analysis gating result
+  const gatingResult = checkAnalysisGating(job);
+
+  // Check for cached analysis
+  let cachedAnalysis: AnalysisResult | null = null;
+  if (isSucceeded) {
+    const analysisPath = path.join(DATA_DIR, "uploads", id, "analysis.json");
+    try {
+      const content = await fs.readFile(analysisPath, "utf-8");
+      cachedAnalysis = JSON.parse(content);
+    } catch {
+      // No cached analysis
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8 dark:bg-black">
@@ -136,6 +156,17 @@ export default async function JobPage({ params }: PageProps) {
             {READINESS_GUIDANCE[policy.readiness]}
           </div>
         </div>
+
+        {/* Document Analysis */}
+        {isSucceeded && (
+          <div className="mb-8">
+            <AnalysisSection
+              jobId={id}
+              gatingResult={gatingResult}
+              initialAnalysis={cachedAnalysis}
+            />
+          </div>
+        )}
 
         {/* Text Quality Metrics */}
         {metrics && (
