@@ -1,57 +1,35 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import type { Job } from "../../lib/jobs";
+import { notFound } from "next/navigation";
+import { getJobById } from "../../lib/jobs";
+import ExtractedTextViewer from "./ExtractedTextViewer";
 
-export default function JobPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const [job, setJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
 
-  useEffect(() => {
-    async function fetchJob() {
-      const res = await fetch(`/api/jobs/${id}`);
-      if (res.status === 404) {
-        setNotFound(true);
-      } else {
-        const data = await res.json();
-        setJob(data);
-      }
-      setLoading(false);
-    }
-    fetchJob();
-  }, [id]);
+export default async function JobPage({ params }: PageProps) {
+  const { id } = await params;
+  const job = getJobById(id);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-zinc-50 p-8 dark:bg-black">
-        <div className="mx-auto max-w-4xl">
-          <p className="text-zinc-600 dark:text-zinc-400">Loading...</p>
-        </div>
-      </div>
-    );
+  if (!job) {
+    notFound();
   }
 
-  if (notFound || !job) {
-    return (
-      <div className="min-h-screen bg-zinc-50 p-8 dark:bg-black">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Job not found
-          </h1>
-          <Link
-            href="/dashboard"
-            className="text-zinc-900 underline hover:text-zinc-600 dark:text-zinc-100 dark:hover:text-zinc-300"
-          >
-            Back to Dashboard
-          </Link>
-        </div>
-      </div>
-    );
+  const metrics = job.textExtractionMetrics;
+  const isSucceeded = job.status === "SUCCEEDED";
+
+  // Determine warnings
+  const warnings: string[] = [];
+  if (metrics) {
+    if (metrics.isEmpty) {
+      warnings.push("Warning: No text content extracted");
+    }
+    if (metrics.isLikelyScanned) {
+      warnings.push("Warning: Document may be scanned (image-based PDF)");
+    }
+    if (metrics.qualityBand === "LOW") {
+      warnings.push("Warning: Low quality text extraction");
+    }
   }
 
   return (
@@ -68,19 +46,109 @@ export default function JobPage() {
           Job Details
         </h1>
 
+        {/* Status and Timestamps */}
         <div className="mb-8 space-y-2">
           <p className="text-zinc-700 dark:text-zinc-300">
             <span className="font-medium">Filename:</span> {job.filename}
           </p>
           <p className="text-zinc-700 dark:text-zinc-300">
-            <span className="font-medium">Status:</span> {job.status}
+            <span className="font-medium">Status:</span>{" "}
+            <span
+              className={
+                job.status === "SUCCEEDED"
+                  ? "text-green-700 dark:text-green-400"
+                  : job.status === "FAILED"
+                    ? "text-red-700 dark:text-red-400"
+                    : job.status === "RUNNING"
+                      ? "text-yellow-700 dark:text-yellow-400"
+                      : "text-zinc-700 dark:text-zinc-300"
+              }
+            >
+              {job.status}
+            </span>
           </p>
           <p className="text-zinc-700 dark:text-zinc-300">
             <span className="font-medium">Created:</span>{" "}
             {new Date(job.createdAt).toLocaleString()}
           </p>
+          {job.startedAt && (
+            <p className="text-zinc-700 dark:text-zinc-300">
+              <span className="font-medium">Started:</span>{" "}
+              {new Date(job.startedAt).toLocaleString()}
+            </p>
+          )}
+          {job.finishedAt && (
+            <p className="text-zinc-700 dark:text-zinc-300">
+              <span className="font-medium">Finished:</span>{" "}
+              {new Date(job.finishedAt).toLocaleString()}
+            </p>
+          )}
         </div>
 
+        {/* Text Quality Metrics */}
+        {metrics && (
+          <div className="mb-8">
+            <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+              Text Quality Metrics
+            </h2>
+
+            {!isSucceeded && (
+              <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+                Note: Job has not completed successfully
+              </p>
+            )}
+
+            {/* Warnings */}
+            {warnings.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {warnings.map((warning, i) => (
+                  <div
+                    key={i}
+                    className="rounded bg-yellow-100 px-4 py-2 text-sm text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                  >
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="rounded border border-zinc-200 p-4 dark:border-zinc-700">
+              <p className="mb-2 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+                Quality:{" "}
+                <span
+                  className={
+                    metrics.qualityBand === "HIGH"
+                      ? "text-green-700 dark:text-green-400"
+                      : metrics.qualityBand === "LOW"
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-yellow-700 dark:text-yellow-400"
+                  }
+                >
+                  {metrics.qualityBand}
+                </span>
+              </p>
+              <div className="grid gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:grid-cols-2">
+                <p>Characters: {metrics.charCount.toLocaleString()}</p>
+                <p>Words: {metrics.wordCount.toLocaleString()}</p>
+                <p>Lines: {metrics.lineCount.toLocaleString()}</p>
+                <p>Non-ASCII: {(metrics.nonAsciiRatio * 100).toFixed(1)}%</p>
+                <p>Whitespace: {(metrics.whitespaceRatio * 100).toFixed(1)}%</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Extracted Text (SUCCEEDED only) */}
+        {isSucceeded && (
+          <div className="mb-8">
+            <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+              Extracted Text
+            </h2>
+            <ExtractedTextViewer jobId={job.id} />
+          </div>
+        )}
+
+        {/* Artifacts */}
         <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           Artifacts
         </h2>
