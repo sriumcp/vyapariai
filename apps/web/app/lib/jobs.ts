@@ -4,6 +4,19 @@ import * as os from "os";
 
 export type JobStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 
+export type QualityBand = "LOW" | "MEDIUM" | "HIGH";
+
+export interface TextExtractionMetrics {
+  charCount: number;
+  wordCount: number;
+  lineCount: number;
+  nonAsciiRatio: number;
+  whitespaceRatio: number;
+  isEmpty: boolean;
+  isLikelyScanned: boolean;
+  qualityBand: QualityBand;
+}
+
 export interface ExtractedTextArtifact {
   path: string;
 }
@@ -27,12 +40,15 @@ export interface Job {
   filename: string;
   status: JobStatus;
   createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
   artifacts?: JobArtifacts;
   document?: JobDocument;
+  textExtractionMetrics?: TextExtractionMetrics;
 }
 
 // Path to the JSON store at repo root
-const DATA_DIR = path.join(process.cwd(), "..", "..", ".data");
+export const DATA_DIR = path.join(process.cwd(), "..", "..", ".data");
 const JOBS_FILE = path.join(DATA_DIR, "jobs.json");
 
 function ensureDataDir(): void {

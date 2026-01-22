@@ -18,7 +18,9 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetchJobs();
+    (async () => {
+      await fetchJobs();
+    })();
   }, []);
 
   async function handleCreateJob(e: React.FormEvent) {

@@ -4,14 +4,13 @@ Guidance for AI coding sessions in this repository.
 
 ## Project Overview
 
-vyapari.ai is an AI-assisted web app for MSME exporters.
+vyapari.ai is a document-processing web app for MSME exporters, designed to
+incrementally evolve into an AI-assisted decision-support system.
 
 - Users upload PDFs (insurance policies, trade documents)
-- System processes them via background jobs to produce:
-  - Summaries
-  - Risk gaps
-  - Exporter checklists
-- Sessions and history are stored for reference
+- System processes them via background jobs to produce explicit artifacts
+- Current focus is on deterministic ingestion, text extraction, and quality signals
+
 
 ## Repo Structure
 
@@ -19,17 +18,15 @@ vyapari.ai is an AI-assisted web app for MSME exporters.
 vyapariai/
 ├── apps/
 │   ├── web/        # Next.js App Router (TypeScript)
-│   └── worker/     # Background worker for PDF + AI jobs
-├── packages/       # Shared libraries (types, prompts, provider interfaces)
+│   └── worker/     # Background worker for PDF processing jobs
 ├── .data/          # Local store: jobs.json + uploads/ (not committed)
 ├── package.json    # Root workspace config
 └── CLAUDE.md
 ```
 
-- Root uses npm workspaces (`apps/*`, `packages/*`)
+- Root uses npm workspaces (`apps/*`)
 - `apps/web` is the user-facing frontend with API routes for job management
 - `apps/worker` handles long-running processing
-- `packages/*` contains shared code only—no apps
 - `.data/jobs.json` stores jobs locally; `.data/uploads/` stores uploaded PDFs (both gitignored)
 
 ## Architectural Principles
@@ -46,14 +43,16 @@ vyapariai/
   - `POST /api/jobs` — upload a PDF and create a job (multipart/form-data, field `"file"`, validates PDF type/extension, max 20MB)
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
-- `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text
+  - `GET /api/jobs/[id]/text` — returns .data/uploads/<jobId>/extracted_text.txt as text/plain
+- `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text and computing deterministic text quality metrics
+- Job detail page displays status, timestamps, extracted text (read-only, truncated), textExtractionMetrics, and warnings
 - Local development only (no deployment targets)
 
 ## Current Constraints
 
-- No database yet (JSON file store; Postgres planned later)
-- No authentication yet
-- No AI provider calls yet (text extraction only, no summarization/analysis)
+- No database (JSON file store only)
+- No authentication
+- No AI provider calls (text extraction only, no summarization/analysis)
 - No queues; worker reads directly from job store
 - Local development only
 - `.data/` is a local-only development store and must never be committed to git.
@@ -70,21 +69,26 @@ As of now, the following are implemented:
 - apps/web exposes API routes:
   - `POST /api/jobs` accepts multipart/form-data with field `"file"` (PDF, max 20MB).
   - `GET /api/jobs` and `GET /api/jobs/[id]` return job data.
+  - `GET /api/jobs/[id]/text` returns .data/uploads/<jobId>/extracted_text.txt as text/plain (rejects paths outside uploads/).
+- Job detail page (`/jobs/[id]`) displays:
+  - Status and timestamps
+  - Extracted text (read-only, truncated; loaded via client component)
+  - `textExtractionMetrics` and quality warnings
 - apps/worker includes a run-once processor that:
   - finds a PENDING job
   - extracts text from the PDF using Poppler `pdftotext` (embedded text only, no OCR)
   - writes extracted text to `.data/uploads/<jobId>/extracted_text.txt`
   - stores extracted text artifact metadata in the job record
   - computes deterministic text quality metrics and stores them in the job record under `textExtractionMetrics`
-  - marks job SUCCEEDED or FAILED based on extraction result.
+  - marks job SUCCEEDED if pdftotext succeeds (even if text is empty), or FAILED if extraction command fails or file is missing.
 - `textExtractionMetrics` contains:
   - `charCount`, `wordCount`, `lineCount`: basic counts
   - `nonAsciiRatio`, `whitespaceRatio`: ratios (0..1)
   - `isEmpty`: boolean (true if charCount === 0)
   - `isLikelyScanned`: boolean (conservative rule-based heuristic)
   - `qualityBand`: "LOW" | "MEDIUM" | "HIGH" (rule-based)
-- Worker tests: `npm run test --workspace=worker` runs unit tests for text metrics.
-- UI uploads PDFs and reads job state via API routes.
+- Worker tests: `npm -w apps/worker test` runs unit tests for text metrics.
+- UI uploads PDFs, lists jobs, and shows job detail page with extracted text and metrics.
 
 Anything not listed here should be assumed NOT implemented.
 
@@ -96,6 +100,15 @@ Anything not listed here should be assumed NOT implemented.
 3. Make small, testable changes
 4. Prefer clarity over cleverness
 5. Always list files changed at the end of a task
+
+## Workflow
+
+Use the following workflow for non-trivial changes:
+
+- **Plan first**: Create and get approval for the implementation plan before writing code.
+- **Implement**: Execute the approved plan.
+- **Review gate**: Strict code review before merge; security and path-safety issues must be fixed.
+- **Iterate**: If review finds issues, fix and re-review until approved.
 
 ## How to Run Locally
 
