@@ -75,7 +75,15 @@ As of now, the following are implemented:
   - extracts text from the PDF using Poppler `pdftotext` (embedded text only, no OCR)
   - writes extracted text to `.data/uploads/<jobId>/extracted_text.txt`
   - stores extracted text artifact metadata in the job record
+  - computes deterministic text quality metrics and stores them in the job record under `textExtractionMetrics`
   - marks job SUCCEEDED or FAILED based on extraction result.
+- `textExtractionMetrics` contains:
+  - `charCount`, `wordCount`, `lineCount`: basic counts
+  - `nonAsciiRatio`, `whitespaceRatio`: ratios (0..1)
+  - `isEmpty`: boolean (true if charCount === 0)
+  - `isLikelyScanned`: boolean (conservative rule-based heuristic)
+  - `qualityBand`: "LOW" | "MEDIUM" | "HIGH" (rule-based)
+- Worker tests: `npm run test --workspace=worker` runs unit tests for text metrics.
 - UI uploads PDFs and reads job state via API routes.
 
 Anything not listed here should be assumed NOT implemented.

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node src/run-once.js",
-    "run-once": "node src/run-once.js"
+    "run-once": "node src/run-once.js",
+    "test": "node --test src/*.test.js"
   }
 }
