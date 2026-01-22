@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFileSync } = require("child_process");
 
 // Path to the JSON store at repo root
 const DATA_DIR = path.join(__dirname, "..", "..", "..", ".data");
@@ -29,6 +30,12 @@ function writeJobsFile(jobs) {
   fs.renameSync(tempFile, JOBS_FILE);
 }
 
+function extractTextFromPdf(pdfPath, outputPath) {
+  // Use pdftotext with -layout to preserve formatting, output to file
+  // execFileSync avoids shell interpolation (safe for filenames with special chars)
+  execFileSync("pdftotext", ["-layout", pdfPath, outputPath]);
+}
+
 function main() {
   console.log("Worker: Looking for PENDING jobs...");
 
@@ -50,30 +57,63 @@ function main() {
   const job = jobs[pendingIndex];
   console.log(`Worker: Processing job ${job.id} (${job.filename})`);
 
-  // Update job status and add placeholder artifacts
-  jobs[pendingIndex] = {
-    ...job,
-    status: "SUCCEEDED",
-    artifacts: {
-      summary: `This is a placeholder summary for ${job.filename}. The document has been analyzed and processed successfully.`,
-      riskGaps: [
-        "Coverage limit may be insufficient for high-value shipments",
-        "Policy excludes certain destination countries",
-        "Deductible clause requires review for compliance",
-      ],
-      checklist: [
-        "Verify beneficiary details match trade documents",
-        "Confirm shipment date falls within policy period",
-        "Ensure cargo description matches commercial invoice",
-        "Check that packaging requirements are met",
-        "Submit claim within specified timeframe if needed",
-      ],
-    },
-  };
+  // Validate job has document metadata
+  if (!job.document || !job.document.storedPath) {
+    console.error(`Worker: Job ${job.id} has no document metadata.`);
+    jobs[pendingIndex] = {
+      ...job,
+      status: "FAILED",
+    };
+    writeJobsFile(jobs);
+    return;
+  }
 
-  writeJobsFile(jobs);
+  // Resolve PDF path (storedPath is relative like ".data/uploads/<jobId>/document.pdf")
+  const pdfPath = path.join(__dirname, "..", "..", "..", job.document.storedPath);
 
-  console.log(`Worker: Job ${job.id} marked as SUCCEEDED with artifacts.`);
+  // Check if PDF exists
+  if (!fs.existsSync(pdfPath)) {
+    console.error(`Worker: PDF file not found at ${pdfPath}`);
+    jobs[pendingIndex] = {
+      ...job,
+      status: "FAILED",
+    };
+    writeJobsFile(jobs);
+    return;
+  }
+
+  // Output path for extracted text
+  const jobUploadDir = path.join(DATA_DIR, "uploads", job.id);
+  const extractedTextPath = path.join(jobUploadDir, "extracted_text.txt");
+  const relativeExtractedTextPath = `.data/uploads/${job.id}/extracted_text.txt`;
+
+  try {
+    console.log(`Worker: Extracting text from ${pdfPath}...`);
+    extractTextFromPdf(pdfPath, extractedTextPath);
+    console.log(`Worker: Text extracted to ${extractedTextPath}`);
+
+    // Update job with success status and artifact metadata
+    jobs[pendingIndex] = {
+      ...job,
+      status: "SUCCEEDED",
+      artifacts: {
+        extractedText: {
+          path: relativeExtractedTextPath,
+        },
+      },
+    };
+    writeJobsFile(jobs);
+    console.log(`Worker: Job ${job.id} marked as SUCCEEDED with extractedText artifact.`);
+  } catch (error) {
+    console.error(`Worker: Failed to extract text from PDF: ${error.message}`);
+    jobs[pendingIndex] = {
+      ...job,
+      status: "FAILED",
+    };
+    writeJobsFile(jobs);
+    console.log(`Worker: Job ${job.id} marked as FAILED.`);
+  }
+
   console.log("Worker: Done.");
 }
 

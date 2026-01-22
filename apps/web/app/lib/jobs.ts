@@ -4,10 +4,15 @@ import * as os from "os";
 
 export type JobStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 
+export interface ExtractedTextArtifact {
+  path: string;
+}
+
 export interface JobArtifacts {
   summary?: string;
   riskGaps?: string[];
   checklist?: string[];
+  extractedText?: ExtractedTextArtifact;
 }
 
 export interface JobDocument {
