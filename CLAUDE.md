@@ -46,14 +46,14 @@ vyapariai/
   - `POST /api/jobs` — upload a PDF and create a job (multipart/form-data, field `"file"`, validates PDF type/extension, max 20MB)
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
-- `apps/worker` has a `run-once` script that processes one PENDING job, marks it SUCCEEDED, and adds placeholder artifacts
+- `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text
 - Local development only (no deployment targets)
 
 ## Current Constraints
 
 - No database yet (JSON file store; Postgres planned later)
 - No authentication yet
-- No AI provider calls yet (placeholder artifacts only)
+- No AI provider calls yet (text extraction only, no summarization/analysis)
 - No queues; worker reads directly from job store
 - Local development only
 - `.data/` is a local-only development store and must never be committed to git.
@@ -70,10 +70,12 @@ As of now, the following are implemented:
 - apps/web exposes API routes:
   - `POST /api/jobs` accepts multipart/form-data with field `"file"` (PDF, max 20MB).
   - `GET /api/jobs` and `GET /api/jobs/[id]` return job data.
-- apps/worker includes a run-once stub processor that:
+- apps/worker includes a run-once processor that:
   - finds a PENDING job
-  - marks it SUCCEEDED
-  - writes placeholder artifacts (summary, risk gaps, checklist).
+  - extracts text from the PDF using Poppler `pdftotext` (embedded text only, no OCR)
+  - writes extracted text to `.data/uploads/<jobId>/extracted_text.txt`
+  - stores extracted text artifact metadata in the job record
+  - marks job SUCCEEDED or FAILED based on extraction result.
 - UI uploads PDFs and reads job state via API routes.
 
 Anything not listed here should be assumed NOT implemented.
