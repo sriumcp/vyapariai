@@ -57,6 +57,24 @@ vyapariai/
 - No AI provider calls yet (placeholder artifacts only)
 - No queues; worker reads directly from job store
 - Local development only
+- `.data/` is a local-only development store and must never be committed to git.
+- Any code touching `.data/` should assume single-user local development.
+
+
+## Current Implemented State (Authoritative)
+
+As of now, the following are implemented:
+
+- Jobs are persisted locally via a JSON-backed store under `.data/` (not committed).
+- apps/web exposes API routes to create and read jobs.
+- apps/worker includes a stub processor that:
+  - finds a PENDING job
+  - marks it SUCCEEDED
+  - writes placeholder artifacts (summary, risk gaps, checklist).
+- UI reads job state via API routes (no hardcoded job list).
+
+Anything not listed here should be assumed NOT implemented.
+
 
 ## AI Contribution Rules
 
@@ -78,3 +96,11 @@ npm run dev:web
 # Run the worker (processes one PENDING job)
 npm run dev:worker
 ```
+
+## How to Start a New Claude Session
+
+When starting a new Claude session:
+1. Read this file fully.
+2. Summarize your understanding of the repo and constraints.
+3. Wait for confirmation before writing code.
+
