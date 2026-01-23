@@ -8,6 +8,7 @@ A document-processing web app for MSME exporters, designed to incrementally evol
 - **Text Extraction**: Automatic text extraction using Poppler `pdftotext`
 - **Quality Metrics**: Deterministic text quality analysis with readiness indicators
 - **AI Analysis**: User-triggered document analysis via OpenAI (extracts document type, key fields with evidence, summary)
+- **Risk Gaps Analysis**: Identifies coverage gaps, exclusions, and concerns in insurance policy documents (requires document analysis first)
 
 ## Prerequisites
 
@@ -74,7 +75,8 @@ vyapariai/
 │       └── <jobId>/
 │           ├── document.pdf
 │           ├── extracted_text.txt
-│           └── analysis.json (after AI analysis)
+│           ├── analysis.json      # After document analysis
+│           └── risk-gaps.json     # After risk gaps analysis (insurance only)
 ├── package.json    # Root workspace config
 ├── CLAUDE.md       # AI coding guidance
 └── README.md
@@ -96,7 +98,8 @@ vyapariai/
 | GET | `/api/jobs` | List all jobs |
 | GET | `/api/jobs/[id]` | Get job details |
 | GET | `/api/jobs/[id]/text` | Get extracted text |
-| POST | `/api/jobs/[id]/analyze` | Run AI analysis |
+| POST | `/api/jobs/[id]/analyze` | Run document analysis |
+| POST | `/api/jobs/[id]/risk-gaps` | Run risk gaps analysis (insurance policies only) |
 
 ### Analysis API
 
@@ -136,6 +139,54 @@ Analysis is blocked when:
 - Extracted text is empty
 - Word count < 50 or character count < 250
 
+### Risk Gaps API
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/api/jobs/<jobId>/risk-gaps \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+```
+
+- `force: true` - Re-run analysis even if cached result exists
+
+**Response (success):**
+```json
+{
+  "riskGaps": [
+    {
+      "category": "EXCLUSION",
+      "severity": "HIGH",
+      "title": "War and terrorism exclusion",
+      "description": "Policy explicitly excludes coverage for war and terrorism events",
+      "evidence": ["excludes coverage for war, terrorism, or civil unrest"],
+      "recommendation": "Confirm with insurer or broker; consider requesting an endorsement."
+    }
+  ],
+  "summary": "Policy has standard exclusions for war/terrorism and natural disasters.",
+  "notes": ["Analysis based on provided text excerpt."],
+  "overallRiskLevel": "HIGH",
+  "analyzedAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+**Response (blocked):** HTTP 422
+```json
+{
+  "allowed": false,
+  "reasons": ["NOT_INSURANCE_DOCUMENT"]
+}
+```
+
+Risk gaps analysis is blocked when:
+- Document analysis hasn't been run (`ANALYSIS_NOT_COMPLETE`)
+- Document type is not an insurance policy (`NOT_INSURANCE_DOCUMENT`)
+- Base analysis gating fails (same rules as document analysis)
+
+Risk gaps analysis shows degraded warnings (but still runs) when:
+- Document type is UNKNOWN
+- Word count < 200
+
 ## Development
 
 ### Run tests
@@ -151,7 +202,7 @@ npm -w apps/web test
 ### Run linter
 
 ```bash
-npm -w apps/web lint
+npm run lint -w apps/web
 ```
 
 ### Build
