@@ -10,10 +10,11 @@ import {
   type ReasonCode,
   type ReadinessStatus,
 } from "../../lib/policy/documentReadiness";
-import { checkAnalysisGating } from "../../lib/analysis/gating";
-import type { AnalysisResult } from "../../lib/analysis/types";
+import { checkAnalysisGating, checkRiskGapsGating } from "../../lib/analysis/gating";
+import type { AnalysisResult, RiskGapsResult } from "../../lib/analysis/types";
 import ExtractedTextViewer from "./ExtractedTextViewer";
 import AnalysisSection from "./AnalysisSection";
+import RiskGapsSection from "./RiskGapsSection";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -71,6 +72,21 @@ export default async function JobPage({ params }: PageProps) {
       // No cached analysis
     }
   }
+
+  // Check for cached risk gaps
+  let cachedRiskGaps: RiskGapsResult | null = null;
+  if (isSucceeded) {
+    const riskGapsPath = path.join(DATA_DIR, "uploads", id, "risk-gaps.json");
+    try {
+      const content = await fs.readFile(riskGapsPath, "utf-8");
+      cachedRiskGaps = JSON.parse(content);
+    } catch {
+      // No cached risk gaps
+    }
+  }
+
+  // Compute risk gaps gating result
+  const riskGapsGatingResult = checkRiskGapsGating(job, cachedAnalysis);
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8 dark:bg-black">
@@ -164,6 +180,18 @@ export default async function JobPage({ params }: PageProps) {
               jobId={id}
               gatingResult={gatingResult}
               initialAnalysis={cachedAnalysis}
+            />
+          </div>
+        )}
+
+        {/* Risk Gaps Analysis */}
+        {isSucceeded && (
+          <div className="mb-8">
+            <RiskGapsSection
+              jobId={id}
+              gatingResult={riskGapsGatingResult}
+              initialRiskGaps={cachedRiskGaps}
+              analysisConfidence={cachedAnalysis?.confidence ?? null}
             />
           </div>
         )}

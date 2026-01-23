@@ -10,6 +10,7 @@ incrementally evolve into an AI-assisted decision-support system.
 - Users upload PDFs (insurance policies, trade documents)
 - System processes them via background jobs to produce explicit artifacts
 - User-triggered AI analysis extracts document type, key fields with evidence, and summary
+- Risk gaps analysis identifies coverage gaps and exclusions in insurance policies
 - Current focus is on deterministic ingestion, text extraction, quality signals, and gated analysis
 
 
@@ -20,10 +21,10 @@ vyapariai/
 ├── apps/
 │   ├── web/                    # Next.js App Router (TypeScript)
 │   │   └── app/
-│   │       ├── api/jobs/       # API routes
-│   │       ├── jobs/[id]/      # Job detail page + AnalysisSection
+│   │       ├── api/jobs/       # API routes (analyze, risk-gaps, text)
+│   │       ├── jobs/[id]/      # Job detail page + AnalysisSection + RiskGapsSection
 │   │       └── lib/
-│   │           ├── analysis/   # Analysis gating, OpenAI wrapper, types
+│   │           ├── analysis/   # Gating, OpenAI wrapper, enrichment, types
 │   │           └── policy/     # Document readiness policy
 │   └── worker/                 # Background worker for PDF processing
 ├── .data/                      # Local store (not committed)
@@ -31,7 +32,8 @@ vyapariai/
 │   └── uploads/<jobId>/
 │       ├── document.pdf
 │       ├── extracted_text.txt
-│       └── analysis.json       # Cached analysis result
+│       ├── analysis.json       # Cached document analysis
+│       └── risk-gaps.json      # Cached risk gaps analysis (insurance only)
 ├── package.json                # Root workspace config
 └── CLAUDE.md
 ```
@@ -56,9 +58,10 @@ vyapariai/
   - `GET /api/jobs` — list all jobs
   - `GET /api/jobs/[id]` — get job details and artifacts
   - `GET /api/jobs/[id]/text` — returns extracted_text.txt as text/plain
-  - `POST /api/jobs/[id]/analyze` — user-triggered AI analysis (gated, cached, server-side OpenAI); Cached: returns .data/uploads/<jobId>/analysis.json if it exists without re-evaluating gating, unless force: true is provided.
+  - `POST /api/jobs/[id]/analyze` — user-triggered document analysis (gated, cached, server-side OpenAI)
+  - `POST /api/jobs/[id]/risk-gaps` — user-triggered risk gaps analysis (requires document analysis first, insurance policies only)
 - `apps/worker` has a `run-once` script that processes one PENDING job by extracting PDF text and computing deterministic text quality metrics
-- Job detail page displays status, timestamps, document readiness, analysis section, extracted text, and metrics
+- Job detail page displays status, timestamps, document readiness, analysis section, risk gaps section, extracted text, and metrics
 - Local development only (no deployment targets)
 
 ## Current Constraints
@@ -87,17 +90,41 @@ As of now, the following are implemented:
 - `GET /api/jobs` — list all jobs
 - `GET /api/jobs/[id]` — get job details
 - `GET /api/jobs/[id]/text` — returns extracted_text.txt as text/plain (path traversal protected)
-- `POST /api/jobs/[id]/analyze` — user-triggered AI analysis:
+- `POST /api/jobs/[id]/analyze` — user-triggered document analysis:
+  - JobId validation: rejects invalid format with 400
   - Gated: blocks if UNUSABLE, missing metrics, isEmpty, wordCount<50, or charCount<250
   - Cached: returns `.data/uploads/<jobId>/analysis.json` if exists (unless `force: true`)
   - Server-side only: calls OpenAI Responses API with extracted text (no PDF/images sent)
   - Returns strict JSON: `{ docType, summaryBullets, keyFields[], confidence, notes }`
+- `POST /api/jobs/[id]/risk-gaps` — user-triggered risk gaps analysis:
+  - JobId validation: rejects invalid format with 400
+  - Gated: requires document analysis first; blocks non-insurance documents (INVOICE, BOL, etc.)
+  - Degraded mode: allows UNKNOWN docType and short text (<200 words) with warnings
+  - Cache invalidation: stores fingerprints of analysis.json and extracted_text.txt; invalidates if inputs change
+  - Server-side enrichment: validates evidence quotes against source text, dedupes gaps, computes overallRiskLevel
+  - Returns: `{ riskGaps[], summary, notes, overallRiskLevel, analyzedAt }`
 
 ### Document Readiness Policy
 - `deriveDocumentPolicy(metrics)` computes readiness from textExtractionMetrics
 - Readiness levels: READY | DEGRADED | UNUSABLE
 - Reason codes: EMPTY_TEXT | LIKELY_SCANNED | LOW_QUALITY_BAND
 - Surfaced in job detail UI with guidance messages
+
+### Risk Gaps Analysis
+- Separate user-triggered analysis that runs after document analysis
+- Only available for insurance policies (INSURANCE_POLICY docType) or UNKNOWN (degraded mode)
+- Gating: `checkRiskGapsGating(job, analysisResult)` in `gating.ts`
+  - Blocks: ANALYSIS_NOT_COMPLETE, NOT_INSURANCE_DOCUMENT, base gating failures
+  - Degraded (warns but allows): UNKNOWN_DOC_TYPE, INSUFFICIENT_TEXT_FOR_RISKS (<200 words)
+- Server-side enrichment in `riskGapsEnrichment.ts`:
+  - Evidence validation: whitespace-normalized verification against source text
+  - Hallucination guard: removes gaps with unverifiable evidence quotes
+  - Gap deduplication: merges by category|severity|normalizedTitle
+  - Early capping: limits riskGaps (20) and evidence arrays (10) before processing
+  - Computes `overallRiskLevel` as max severity across all gaps
+- Cache invalidation: fingerprints (SHA-256) of analysis.json and extracted_text.txt stored in risk-gaps.json
+- Risk categories: COVERAGE_GAP, EXCLUSION, LIMIT_CONCERN, AMBIGUITY, COMPLIANCE, OTHER
+- Severity levels: HIGH, MEDIUM, LOW, INFO
 
 ### Job Detail Page (`/jobs/[id]`)
 - Status and timestamps
@@ -106,6 +133,10 @@ As of now, the following are implemented:
   - "Run Analysis" button (disabled when gating blocks)
   - Degraded warning when allowed but quality is low
   - Results display: docType, confidence, summaryBullets, keyFields with evidence, notes
+- Risk gaps section (for SUCCEEDED jobs):
+  - "Run Risk Analysis" button (disabled when gating blocks or document analysis not run)
+  - Degraded warnings for UNKNOWN docType or short text
+  - Results display: overallRiskLevel badge, risk cards with severity/category/evidence/recommendation, notes
 - Text quality metrics
 - Extracted text (read-only, truncated; loaded via client component)
 
@@ -126,7 +157,11 @@ As of now, the following are implemented:
 
 ### Tests
 - Worker tests: `npm -w apps/worker test` runs unit tests for text metrics
-- Web tests: `npm -w apps/web test` runs unit tests for document readiness policy and analysis gating
+- Web tests: `npm -w apps/web test` runs unit tests for:
+  - Document readiness policy
+  - Analysis gating (`checkAnalysisGating`)
+  - Risk gaps gating (`checkRiskGapsGating`)
+  - Risk gaps enrichment (evidence validation, deduplication, severity computation)
 
 Anything not listed here should be assumed NOT implemented.
 
@@ -181,7 +216,8 @@ npm run dev:worker
 2. Upload a PDF
 3. Run `npm run dev:worker` in another terminal to process the job
 4. Click the job to view details
-5. Click "Run Analysis" to trigger AI analysis (requires OPENAI_API_KEY)
+5. Click "Run Analysis" to trigger document analysis (requires OPENAI_API_KEY)
+6. For insurance policies: Click "Run Risk Analysis" to identify coverage gaps
 
 ## How to Start a New Claude Session
 

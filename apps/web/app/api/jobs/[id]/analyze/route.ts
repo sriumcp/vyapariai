@@ -8,6 +8,9 @@ import { checkAnalysisGating } from "../../../../lib/analysis/gating";
 import { runAnalysis } from "../../../../lib/analysis/openai";
 import type { AnalysisBlockedResponse } from "../../../../lib/analysis/types";
 
+// Valid jobId format: alphanumeric with hyphens and underscores
+const JOB_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
@@ -15,7 +18,12 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  // 1. Load job from store
+  // 1. Validate jobId format (defense-in-depth)
+  if (!id || !JOB_ID_PATTERN.test(id)) {
+    return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
+  }
+
+  // 2. Load job from store
   const job = getJobById(id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -44,7 +52,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const analysisPath = path.resolve(jobDir, "analysis.json");
   const textPath = path.resolve(jobDir, "extracted_text.txt");
 
-  // 2. Check cache FIRST (before gating)
+  // 3. Check cache FIRST (before gating)
   if (!force) {
     try {
       const cached = await fs.readFile(analysisPath, "utf-8");
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  // 3. Apply gating checks
+  // 4. Apply gating checks
   const gating = checkAnalysisGating(job);
   if (!gating.allowed) {
     const response: AnalysisBlockedResponse = {
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response, { status: 409 });
   }
 
-  // 4. Verify API key is configured before proceeding
+  // 5. Verify API key is configured before proceeding
   if (!process.env.OPENAI_API_KEY) {
     console.error("OPENAI_API_KEY not configured");
     return NextResponse.json(
@@ -74,7 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // 5. Load extracted text
+  // 6. Load extracted text
   let extractedText: string;
   try {
     extractedText = await fs.readFile(textPath, "utf-8");
