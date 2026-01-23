@@ -254,7 +254,7 @@ const RISK_GAPS_SCHEMA = {
           },
           recommendation: { type: "string" },
         },
-        required: ["category", "severity", "title", "description", "evidence"],
+        required: ["category", "severity", "title", "description", "evidence", "recommendation"],
         additionalProperties: false,
       },
     },
@@ -342,9 +342,11 @@ ${truncatedText}`;
     });
 
     if (!response.ok) {
+      const errorBody = await response.text();
       console.error(
         `OpenAI API error: ${response.status} ${response.statusText}`
       );
+      console.error(`OpenAI error details: ${errorBody}`);
       throw new Error(`OpenAI API request failed: ${response.status}`);
     }
 
